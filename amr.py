@@ -1,5 +1,33 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+#
+# Copyright (C) 2015 Shu Cai and Kevin Knight
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+
+#
+# Modified by Didzis Gosko, 2016
+#
+
+
+from __future__ import print_function
 
 """
 AMR (Abstract Meaning Representation) structure
@@ -161,7 +189,7 @@ class AMR(object):
         Output AMR string
 
         """
-        print >> DEBUG_LOG, self.__str__()
+        print(self.__str__(), file=DEBUG_LOG)
 
 
     @staticmethod
@@ -195,40 +223,40 @@ class AMR(object):
         cur_relation_name = ""
         # having unmatched quote string
         in_quote = False
-        for i, c in enumerate(line.strip()):
-            if c == " ":
+        line = line.strip()
+        escaped = False
+        for i, c in enumerate(line):
+            if escaped:
+                cur_charseq.append(c)
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            elif c == "\"":
+                # flip in_quote value when a quote symbol is encountered
+                # insert placeholder if in_quote from last symbol
+                if in_quote and not cur_charseq:
+                    cur_charseq.append('_')
+                in_quote = not in_quote
+            elif in_quote:
+                cur_charseq.append(c)
+            elif c == " ":
                 # allow space in relation name
                 if state == 2:
                     cur_charseq.append(c)
-                continue
-            if c == "\"":
-                # flip in_quote value when a quote symbol is encountered
-                # insert placeholder if in_quote from last symbol
-                if in_quote:
-                    cur_charseq.append('_')
-                in_quote = not in_quote
             elif c == "(":
-                # not significant symbol if inside quote
-                if in_quote:
-                    cur_charseq.append(c)
-                    continue
                 # get the attribute name
                 # e.g :arg0 (x ...
                 # at this point we get "arg0"
                 if state == 2:
                     # in this state, current relation name should be empty
                     if cur_relation_name != "":
-                        print >> ERROR_LOG, "Format error when processing ", line[0:i+1]
+                        print("Format error when processing ", line[0:i+1], file=ERROR_LOG)
                         return None
                     # update current relation name for future use
                     cur_relation_name = "".join(cur_charseq).strip()
                     cur_charseq[:] = []
                 state = 1
             elif c == ":":
-                # not significant symbol if inside quote
-                if in_quote:
-                    cur_charseq.append(c)
-                    continue
                 # Last significant symbol is "/". Now we encounter ":"
                 # Example:
                 # :OR (o2 / *OR*
@@ -253,7 +281,7 @@ class AMR(object):
                     cur_charseq[:] = []
                     parts = temp_attr_value.split()
                     if len(parts) < 2:
-                        print >> ERROR_LOG, "Error in processing; part len < 2", line[0:i+1]
+                        print("Error in processing", line[0:i+1], file=ERROR_LOG)
                         return None
                     # For the above example, node name is "op1", and node value is "w"
                     # Note that this node name might not be encountered before
@@ -262,7 +290,7 @@ class AMR(object):
                     # We need to link upper level node to the current
                     # top of stack is upper level node
                     if len(stack) == 0:
-                        print >> ERROR_LOG, "Error in processing", line[:i], relation_name, relation_value
+                        print("Error in processing", line[:i], relation_name, relation_value, file=ERROR_LOG)
                         return None
                     # if we have not seen this node name before
                     if relation_value not in node_dict:
@@ -271,9 +299,6 @@ class AMR(object):
                         node_relation_dict1[stack[-1]].append((relation_name, relation_value))
                 state = 2
             elif c == "/":
-                if in_quote:
-                    cur_charseq.append(c)
-                    continue
                 # Last significant symbol is "(". Now we encounter "/"
                 # Example:
                 # (d / default-01
@@ -283,7 +308,7 @@ class AMR(object):
                     cur_charseq[:] = []
                     # if this node name is already in node_dict, it is duplicate
                     if node_name in node_dict:
-                        print >> ERROR_LOG, "Duplicate node name ", node_name, " in parsing AMR"
+                        print("Duplicate node name ", node_name, " in parsing AMR", file=ERROR_LOG)
                         return None
                     # push the node name to stack
                     stack.append(node_name)
@@ -310,16 +335,13 @@ class AMR(object):
                         cur_relation_name = ""
                 else:
                     # error if in other state
-                    print >> ERROR_LOG, "Error in parsing AMR", line[0:i+1]
+                    print("Error in parsing AMR", line[0:i+1], file=ERROR_LOG)
                     return None
                 state = 3
             elif c == ")":
-                if in_quote:
-                    cur_charseq.append(c)
-                    continue
                 # stack should be non-empty to find upper level node
                 if len(stack) == 0:
-                    print >> ERROR_LOG, "Unmatched parenthesis at position", i, "in processing", line[0:i+1]
+                    print("WARNING: Unmatched parathesis at position", i, "in processing", line[0:i+1], file=ERROR_LOG)
                     return None
                 # Last significant symbol is ":". Now we encounter ")"
                 # Example:
@@ -330,7 +352,7 @@ class AMR(object):
                     cur_charseq[:] = []
                     parts = temp_attr_value.split()
                     if len(parts) < 2:
-                        print >> ERROR_LOG, "Error processing", line[:i+1], temp_attr_value
+                        print("Error processing", line[:i+1], temp_attr_value, file=ERROR_LOG)
                         return None
                     relation_name = parts[0].strip()
                     relation_value = parts[1].strip()
@@ -368,7 +390,7 @@ class AMR(object):
         attribute_list = []
         for v in node_name_list:
             if v not in node_dict:
-                print >> ERROR_LOG, "Error: Node name not found", v
+                print("Error: Node name not found", v, file=ERROR_LOG)
                 return None
             else:
                 node_value_list.append(node_dict[v])
@@ -401,14 +423,22 @@ class AMR(object):
 # a unittest can also be used.
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print >> ERROR_LOG, "No file given"
+        print("No file given", file=ERROR_LOG)
         exit(1)
     amr_count = 1
-    for line in open(sys.argv[1]):
-        cur_line = line.strip()
-        if cur_line == "" or cur_line.startswith("#"):
-            continue
-        print >> DEBUG_LOG, "AMR", amr_count
-        current = AMR.parse_AMR_line(cur_line)
+    def process(amr):
+        global amr_count
+        print("AMR", amr_count, file=DEBUG_LOG)
+        current = AMR.parse_AMR_line(amr)
         current.output_amr()
         amr_count += 1
+    amr = []
+    for line in (l.strip() for l in open(sys.argv[1])):
+        if not line or line[0] == '#':
+            if amr:
+                process(' '.join(amr))
+            amr = []
+        else:
+            amr.append(line)
+    if amr:
+        process(' '.join(amr))
